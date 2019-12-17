@@ -1,5 +1,6 @@
 import java.io.File
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
@@ -8,6 +9,8 @@ import akka.http.scaladsl.server.PathMatchers
 import akka.stream.Materializer
 import com.typesafe.config.ConfigFactory
 
+import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.duration.Duration
 import scala.io.StdIn
 import scala.sys.process._
 
@@ -22,7 +25,7 @@ object Main {
     recording = true                // set the server state to true
     file_name = getTime()+".mp4"    // set the temp name of the file
     // record the file with streamlink
-    process = Process(Seq("streamlink", "-o", file_name, config.getString("test_stream"), "best"),new File(saveDir)).run
+    process = Process(Seq("streamlink", "-o", file_name, config.getString("stream"), "best"),new File(saveDir)).run
   }
 
   def stop_recording()={
@@ -94,13 +97,19 @@ object Main {
           )
         }
 
+    println(s"Server online at http://odroidxu4:8080/\nPress CTRL-C to stop...")
     // start the server
-    val bindingFuture = Http().bindAndHandle(route, "localhost", 8080)
+    val future = for { bindingFuture <- Http().bindAndHandle(route, "0.0.0.0", 8080)
+                  waitOnFuture  <- Future.never}
+      yield (waitOnFuture,bindingFuture)
+    sys.addShutdownHook {                   // terminate any process that's running
+      if(recording)
+        process.destroy()
+    }
+    Await.ready(future, Duration.Inf)       // wait forever
 
-    println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
-    StdIn.readLine()        // let it run until user presses return
-    bindingFuture
-      .flatMap(_.unbind())  // trigger unbinding from the port
-      .onComplete(_ => system.terminate()) // and shutdown when done
+    future
+      .flatMap(_._2.unbind())               // trigger unbinding from the port
+      .onComplete(_ => system.terminate())  // and shutdown when done
   }
 }
