@@ -62,30 +62,46 @@ object Main {
         get {                     // everything is get to make it easy
           concat(
           path("hello") {
+            println("hello request received")
             complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
           },
+          path("ls") {
+            println("ls request received")
+            val p = Process(Seq("ls"), new File(saveDir)).!!
+            complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"<h1>$p</h1>"))
+          },
           path("pwd") {
+            println("pwd request received")
             val p = Process(Seq("pwd"), new File(saveDir)).!!
             complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"<h1>$p</h1>"))
           },
           path("record") {    // start a recording
+            println("record request received")
             if (!recording) {
+              println("Recording...")
               record_stream()
               complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Recording...</h1>"))
             }
-            else
+            else {
+              println("Already Recording...")
               complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Already Recording...</h1>"))
+            }
           },
           path("stop") {    // stop the current recording
+            println("stop request received")
             if (recording) {
+              println("Stopping...")
               stop_recording()
               complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Stopped...</h1>"))
             }
-            else
+            else {
+              println("Already Stopped...")
               complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Already Stopped...</h1>"))
+            }
           },
           path("rename") {  // change the name of the file we just recorded
             parameter("name".as[String]) { (name) =>
+              println(s"rename?=$name request received")
               if (!file_name.equals("")) {
                 rename(name)
                 complete((StatusCodes.Accepted, s"Name changed to $name"))
