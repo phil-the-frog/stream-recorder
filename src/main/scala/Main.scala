@@ -14,11 +14,15 @@ import scala.concurrent.duration.Duration
 import scala.io.StdIn
 import scala.sys.process._
 
+import util.Try
+
 
 object Main {
 
   val config = ConfigFactory.load()                             // load config from application.conf from resources
   val saveDir = config.getString("dir")                   // the dir where to save the files
+  val reencodePreset = config.getString("reencodePreset")
+  val reencodeCRF = config.getString("reencodeCRF")
   def getTime() = DateTime.now.toIsoDateTimeString()    // temporarily name the file to the time
 
   def record_stream()={
@@ -40,10 +44,45 @@ object Main {
   }
 
   def rename(name: String)={
-    println(name+".mp4")
-    println(file_name)
-    val rename_cmd = Process(Seq("mv", file_name, name+".mp4"),new File(saveDir)).!!    // rename file_name to name
-    file_name = ""               // reset file_name
+
+    val name_mp4 = s"$name.mp4"
+    reencode(file_name, name_mp4)               // re-encoded the file to fix all the problems with time and corrupt packets
+    /*
+    if(mv(file_name, name_mp4, saveDir)){
+      println(s"file successfully renamed to $name_mp4")
+      file_name = ""               // reset file_name
+    }
+    else{
+      println("rename failed")
+    }
+     */
+    /*
+    val rename_cmd = Process(Seq("mv", file_name, name+".mp4"),new File(saveDir)).run    // rename file_name to name
+     */
+  }
+
+  /***
+   *
+   * @param oldName full file path to old file
+   * @param newName full file path to name file name
+   * @return boolean - true of rename successful
+   */
+  def mv(oldName: String, newName: String, dir: String) =
+    Try(new File(dir, oldName).renameTo(new File(dir, newName))).getOrElse(false)
+
+  /***
+   *
+   * @param oldName  should be like "2020-05-10T00:23:19.mp4"
+   * @param newName  should be like "nu mai harul.mp4"
+   * @description you have to let ffmpeg process the file and rm it because it doesn't like inplace renaming
+   */
+  def reencode(oldName: String, newName: String)={
+    println(s"re-encoding $oldName as $newName...")
+    val ffmpeg_cmd = Process(Seq("ffmpeg", "-y", "-i", "file:"+oldName, "-c:v", "libx264", "-preset", reencodePreset,
+      "-crf", reencodeCRF, "-c:a", "copy", "file:"+newName), new File(saveDir))     // execute the ffmpeg to re-encode the file
+    val rm_cmd = Process(Seq("rm", oldName), new File(saveDir))
+    val encode_cmd = ffmpeg_cmd #&& rm_cmd;
+    encode_cmd.run    // concurrent, we have to handle other requests
   }
 
   // global variables to store info about the file we are recording to
